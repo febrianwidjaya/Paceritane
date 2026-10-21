@@ -118,6 +118,7 @@ main{padding-top:64px}
 .fbn{padding:8px 14px;font-size:13px;color:#d2b06a;background:#ffffff10}
 .bdg{margin-left:auto;font-style:normal;background:#d2b06a;color:#101826;border-radius:99px;font-size:12px;font-weight:600;padding:0 8px;min-width:22px;text-align:center}.bdg:empty{display:none}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 </head>
 <body>
 <button id="mb" class="mb" aria-label="Buka menu">☰</button>
@@ -215,7 +216,12 @@ main{padding-top:64px}
 <script>
 (function(){
 var $=function(i){return document.getElementById(i)};
-var db=null,assets=null,uid=null,items=[],unsub=null;
+var SUPABASE_URL="ISI_URL_PROYEK_SUPABASE",SUPABASE_KEY="ISI_ANON_ATAU_PUBLISHABLE_KEY";
+var BUCKET="cerpen",sb=null,items=[];
+try{if(!/^ISI_/.test(SUPABASE_URL))sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY)}catch(e){}
+function pub(p){return p?sb.storage.from(BUCKET).getPublicUrl(p).data.publicUrl:null}
+function mapRow(r){return{id:r.id,judul:r.judul,nama:r.nama,jenjang:r.jenjang,asal:r.asal,sekolah:r.sekolah,wilayah:r.wilayah,tahun:String(r.tahun),npsn:r.npsn,ts:Date.parse(r.created_at),pdfPath:r.pdf_path,coverPath:r.cover_path,pdfUrl:pub(r.pdf_path),coverUrl:pub(r.cover_path)}}
+async function load(){if(!sb)return;var r=await sb.from("cerpen").select("*").order("created_at",{ascending:false});if(r.error){toast("Gagal memuat galeri");return}items=r.data.map(mapRow);render();renderMine()}
 var COLORS=[["#1b2a41","#33496b"],["#5a2a2a","#8a4a40"],["#2f4a3f","#58786a"],["#4a3a2a","#7d6548"],["#3a2f4a","#66587d"],["#6b5426","#a38a4f"],["#2b3d4f","#587087"]];
 function esc(s){var d=document.createElement("div");d.textContent=s==null?"":String(s);return d.innerHTML}
 function col(t){var h=0;for(var i=0;i<t.length;i++)h=(h*31+t.charCodeAt(i))|0;return COLORS[Math.abs(h)%COLORS.length]}
@@ -297,30 +303,38 @@ function renderMine(){
   var m=items.filter(function(i){return ses&&i.npsn===ses.npsn});
   $("mine").innerHTML=m.length?m.map(function(i){return '<div class="mine">'+coverHTML(i)+'<div class="t"><b>'+esc(i.judul)+'</b><small>'+esc(i.tahun||"")+'</small></div><button class="btn dng" data-del="'+esc(i.id)+'">Hapus</button></div>'}).join(""):'<div class="hint">Kamu belum mengunggah tugas.</div>';
 }
-$("mine").onclick=async function(e){var id=e.target.dataset.del;if(!id||!db)return;if(!confirm("Hapus tugas ini dari galeri?"))return;
-  try{await db.collection("tugas").doc(id).delete()}catch(x){$("msg").textContent="Gagal menghapus.";$("msg").className="msg er"}};
+$("mine").onclick=async function(e){var id=e.target.dataset.del;if(!id||!sb)return;if(!confirm("Hapus cerpen ini dari galeri?"))return;
+  var it=items.filter(function(x){return x.id===id})[0];
+  var r=await sb.from("cerpen").delete().eq("id",id);
+  if(r.error){setMsg("Gagal menghapus: "+r.error.message,false);return}
+  if(it)await undo([it.pdfPath,it.coverPath].filter(Boolean));
+  load()};
 
 function setMsg(t,ok){$("msg").textContent=t;$("msg").className="msg "+(ok?"ok":"er")}
 var cancelled=false;
-async function undo(ids){for(var k=0;k<ids.length;k++){try{await assets.delete(ids[k])}catch(e){}}}
+async function undo(ids){try{await sb.storage.from(BUCKET).remove(ids)}catch(e){}}
 function fx(inp,btn){var u=function(){btn.hidden=!inp.files.length};inp.addEventListener("change",u);btn.onclick=function(){inp.value="";u()};u()}
 fx($("f-pdf"),$("x-pdf"));fx($("f-cov"),$("x-cov"));
 $("cx").onclick=function(){cancelled=true;setMsg("Membatalkan unggahan…",false)};
 $("go").onclick=async function(){
   var nama=$("f-nama").value.trim(),judul=$("f-judul").value.trim(),pdf=$("f-pdf").files[0],cov=$("f-cov").files[0];
-  if(!db||!assets){setMsg("Unggah belum tersedia untuk akunmu. Minta guru mengundangmu sebagai kontributor.",false);return}
+  if(!sb){setMsg("Situs belum terhubung ke Supabase.",false);return}
   if(!ses){setMsg("Masuk dulu dengan NPSN sekolahmu.",false);return}
   if(!nama||!judul||!$("f-asal").value.trim()){setMsg("Isi nama penulis, judul cerpen, dan asal sekolah dulu ya.",false);return}
   if(!pdf||pdf.type!=="application/pdf"){setMsg("Pilih file PDF.",false);return}
   $("go").disabled=true;setMsg("Mengunggah… mohon tunggu ⏳",true);
   try{
     cancelled=false;$("cx").hidden=false;
-    var p=await assets.upload(pdf),cu=null,cid=null;
-    if(cancelled){await undo([p.id]);throw new Error("__batal")}
-    if(cov){var c=await assets.upload(cov);cu=c.url;cid=c.id}
-    if(cancelled){await undo([p.id,cid].filter(Boolean));throw new Error("__batal")}
-    var id="t"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-    await db.collection("tugas").doc(id).set({nama:nama,judul:judul,jenjang:$("f-jenjang").value,asal:$("f-asal").value.trim(),tahun:$("f-thn").value,pdfUrl:p.url,pdfId:p.id,coverUrl:cu,uid:uid,npsn:ses.npsn,sekolah:ses.sekolah,wilayah:ses.wilayah,ts:Date.now()});
+    if(pdf.size>20971520)throw new Error("PDF melebihi 20 MB");
+    var us=(await sb.auth.getUser()).data.user;if(!us)throw new Error("Sesi berakhir, silakan masuk lagi");
+    var base=us.id+"/"+Date.now().toString(36),pp=base+".pdf",cp=null,st=sb.storage.from(BUCKET);
+    var r1=await st.upload(pp,pdf,{contentType:"application/pdf"});if(r1.error)throw r1.error;
+    if(cancelled){await undo([pp]);throw new Error("__batal")}
+    if(cov){var ex={"image/jpeg":"jpg","image/png":"png","image/webp":"webp","image/gif":"gif"}[cov.type]||"jpg";cp=base+"-cover."+ex;var r2=await st.upload(cp,cov,{contentType:cov.type});if(r2.error){await undo([pp]);throw r2.error}}
+    if(cancelled){await undo([pp,cp].filter(Boolean));throw new Error("__batal")}
+    var ins=await sb.from("cerpen").insert({npsn:ses.npsn,sekolah:ses.sekolah,wilayah:ses.wilayah,nama:nama,jenjang:$("f-jenjang").value,asal:$("f-asal").value.trim(),judul:judul,tahun:+$("f-thn").value,pdf_path:pp,cover_path:cp});
+    if(ins.error){await undo([pp,cp].filter(Boolean));throw ins.error}
+    load();
     setMsg("Berhasil! Tugasmu sudah tampil di Galeri 🎉",true);
     $("f-judul").value="";$("f-pdf").value="";$("f-cov").value="";$("f-pdf").dispatchEvent(new Event("change"));$("f-cov").dispatchEvent(new Event("change"));
   }catch(x){if(x&&x.message==="__batal")setMsg("Unggahan dibatalkan. Tidak ada yang tersimpan.",false);else setMsg("Gagal mengunggah: "+(x&&x.message?x.message:"coba lagi"),false)}
@@ -329,52 +343,41 @@ $("go").onclick=async function(){
 };
 
 var ses=null,mode="in";
-try{var raw=localStorage.getItem("sdn4ses");if(raw)ses=JSON.parse(raw)}catch(e){}
-function b64(b){return btoa(String.fromCharCode.apply(null,new Uint8Array(b)))}
-function ub64(s){return Uint8Array.from(atob(s),function(c){return c.charCodeAt(0)})}
-async function hash(pw,salt){var k=await crypto.subtle.importKey("raw",new TextEncoder().encode(pw),"PBKDF2",false,["deriveBits"]);return b64(await crypto.subtle.deriveBits({name:"PBKDF2",salt:ub64(salt),iterations:100000,hash:"SHA-256"},k,256))}
 function updAuth(){var l=!!ses,f=$("sbf");f.textContent="";if(l){var bb=document.createElement("b");bb.textContent=ses.sekolah;f.appendChild(bb);f.appendChild(document.createTextNode("NPSN "+ses.npsn+" · "+ses.wilayah))}else f.textContent="Belum masuk sebagai sekolah";$("auth").hidden=l;$("up").hidden=!l;$("mp").hidden=!l;if(l){$("who").textContent=ses.sekolah+" (NPSN "+ses.npsn+")";$("whr").textContent=ses.wilayah;if(!$("f-asal").value)$("f-asal").value=ses.sekolah}renderMine()}
-function setSes(s){ses=s;try{s?localStorage.setItem("sdn4ses",JSON.stringify(s)):localStorage.removeItem("sdn4ses")}catch(e){}updAuth()}
-$("out").onclick=function(){setSes(null)};
+function setSes(s){ses=s;updAuth()}
+async function loadProfile(){var u=(await sb.auth.getUser()).data.user;if(!u){setSes(null);return false}var p=await sb.from("sekolah").select("*").eq("id",u.id).maybeSingle();if(p.data){setSes({npsn:p.data.npsn,sekolah:p.data.nama,wilayah:p.data.wilayah});return true}setSes(null);return false}
+$("out").onclick=async function(){if(sb)await sb.auth.signOut();setSes(null)};
 $("a-sw").onclick=function(){mode=mode==="in"?"up":"in";var i=mode==="in";$("a-reg").hidden=i;$("a-h").textContent=i?"🔐 Masuk Sekolah":"📝 Daftarkan Sekolah";$("a-go").textContent=i?"Masuk":"Daftar";$("a-sw").textContent=i?"Belum punya akun? Daftar":"Sudah punya akun? Masuk";$("a-msg").textContent=""};
 $("a-go").onclick=async function(){
   var np=$("a-npsn").value.trim(),pw=$("a-pw").value,m=$("a-msg");
   function e(t){m.textContent=t;m.className="msg er"}
   if(!/^\d{8}$/.test(np)){e("NPSN harus 8 digit angka.");return}
   if(pw.length<6){e("Kata sandi minimal 6 karakter.");return}
-  if(!db||!window.crypto||!crypto.subtle){e("Layanan belum tersedia. Buka lewat akun yang diundang guru.");return}
-  $("a-go").disabled=true;
+  if(!sb){e("Situs belum terhubung ke Supabase.");return}
+  $("a-go").disabled=true;var em=np+"@paceritane.id";
   try{
-    var ref=db.collection("sekolah").doc(np),s=await ref.get();
     if(mode==="up"){
       var nm=$("a-nm").value.trim(),wl=$("a-wl").value.trim();
       if(!nm||!wl)e("Isi nama sekolah dan pilih kecamatan.");
-      else if(s.exists)e("NPSN ini sudah terdaftar. Silakan masuk.");
-      else{var salt=b64(crypto.getRandomValues(new Uint8Array(16)));await ref.set({nama:nm,wilayah:wl,salt:salt,hash:await hash(pw,salt),ts:Date.now()});setSes({npsn:np,sekolah:nm,wilayah:wl});$("a-pw").value=""}
+      else{
+        var r=await sb.auth.signUp({email:em,password:pw});
+        if(r.error)e(/registered|already|exists/i.test(r.error.message)?"NPSN ini sudah terdaftar. Silakan masuk.":r.error.message);
+        else if(!r.data.session)e("Pendaftaran meminta konfirmasi email. Nonaktifkan Confirm email di pengaturan Supabase.");
+        else{var pr=await sb.from("sekolah").insert({id:r.data.user.id,npsn:np,nama:nm,wilayah:wl});
+          if(pr.error){await sb.auth.signOut();e("Gagal menyimpan data sekolah: "+pr.error.message)}else{setSes({npsn:np,sekolah:nm,wilayah:wl});$("a-pw").value=""}}
+      }
     }else{
-      if(!s.exists)e("NPSN belum terdaftar. Klik Daftar.");
-      else{var d=s.data();if(await hash(pw,d.salt)===d.hash){setSes({npsn:np,sekolah:d.nama,wilayah:d.wilayah});$("a-pw").value=""}else e("NPSN atau kata sandi salah.")}
+      var r2=await sb.auth.signInWithPassword({email:em,password:pw});
+      if(r2.error)e("NPSN atau kata sandi salah.");
+      else if(await loadProfile())$("a-pw").value="";else e("Data sekolah tidak ditemukan.");
     }
   }catch(x){e("Gagal: "+(x&&x.message?x.message:"coba lagi"))}
   $("a-go").disabled=false;
 };
 updAuth();
-function sub(){
-  if(!db)return;
-  unsub=db.collection("tugas").onSnapshot(function(s){
-    items=s.docs.map(function(d){var v=d.data();v.id=d.id;return v}).sort(function(a,b){return(b.ts||0)-(a.ts||0)});
-    render();renderMine();
-  },function(){});
-}
 render();
-if(window.claude&&claude.use){
-  Promise.all([claude.use("db"),claude.use("assets"),claude.use("user")]).then(async function(r){
-    db=r[0];assets=r[1];
-    if(r[2]){try{uid=await r[2].id()}catch(e){}}
-    $("nodb").hidden=!!(db&&assets);sub();
-    if(ses&&db){try{var sd=await db.collection("sekolah").doc(ses.npsn).get();if(!sd.exists)setSes(null)}catch(e){}}
-  }).catch(function(){$("nodb").hidden=false});
-}else{$("nodb").hidden=false}
+if(!sb){var nm0="Situs belum terhubung ke Supabase. Isi SUPABASE_URL dan SUPABASE_KEY di bagian atas skrip file index.html.";$("nodb").textContent=nm0;$("nodb").hidden=false;$("a-msg").textContent=nm0;$("a-msg").className="msg er"}
+else{load();setInterval(load,60000);sb.auth.getSession().then(function(r){if(r.data.session)loadProfile()})}
 })();
 </script>
 </body>
