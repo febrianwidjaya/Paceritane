@@ -126,6 +126,24 @@ main{padding-top:64px}
 .cap mark{background:#d2b06a;color:#101826;border-radius:3px;padding:0 2px}
 .tnote{padding:0 16px 8px;font-size:12px;color:#d2b06a;text-align:center}
 .tts[hidden],.cap[hidden],.tnote[hidden]{display:none}
+.hero{padding:0}
+.hero::after{display:none}
+.car-vp{overflow:hidden;position:relative}
+.car-track{display:flex;transition:transform .6s ease;touch-action:pan-y}
+.slide{position:relative;flex:0 0 100%;min-width:0;min-height:330px;padding:52px 64px 60px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.sl-h{position:relative;font:700 clamp(26px,4.5vw,40px) "Cormorant Garamond",Georgia,serif;margin-bottom:10px;text-shadow:0 1px 6px #0007}
+.slide p{position:relative}
+.sl-row{position:relative;display:flex;gap:18px;justify-content:center;overflow:hidden;margin-top:10px;width:100%}
+.item.sl-c{flex:0 0 auto;width:112px;color:#f6efe0}
+.item.sl-c b{display:block;margin-top:8px;font:700 16px/1.2 "Cormorant Garamond",Georgia,serif;text-shadow:0 1px 4px #0008}
+.btn.gold{background:#d2b06a;color:#101826;position:relative}
+.car-b{position:absolute;top:50%;transform:translateY(-50%);z-index:3;width:40px;height:40px;border:1px solid #ffffff40;background:#0006;color:#f6efe0;border-radius:50%;font-size:24px;line-height:1;cursor:pointer}
+.car-b.prev{left:12px}.car-b.next{right:12px}
+.car-dots{position:absolute;left:0;right:0;bottom:18px;display:flex;justify-content:center;gap:8px;z-index:3}
+.car-dots button{width:9px;height:9px;border-radius:5px;border:0;padding:0;background:#ffffff55;cursor:pointer;transition:width .25s}
+.car-dots button.on{background:#d2b06a;width:26px}
+@media(max-width:640px){.slide{padding:44px 14px 56px;min-height:300px}.car-b{display:none}.sl-row{gap:12px}.item.sl-c{width:98px}.item.sl-c:nth-child(n+4){display:none}}
+@media(prefers-reduced-motion:reduce){.car-track{transition:none}}
 </style>
 </head>
 <body>
@@ -145,7 +163,17 @@ main{padding-top:64px}
 
 <main>
 <section id="v-pub">
-  <div class="hero"><h1><span class="jv">ꦥꦕꦺꦫꦶꦠꦤꦺ</span><span class="wm">Paceritane</span></h1><p>Galeri cerpen karya siswa Pacitan: cerita dari pantai, karst, dan goa. Klik sampulnya untuk membaca.</p><svg class="sc" viewBox="0 0 800 120" preserveAspectRatio="xMidYMax slice" aria-hidden="true"><circle cx="600" cy="72" r="34" fill="#f2c15e"/><path d="M0 100 L70 52 L120 82 L200 34 L270 84 L330 60 L400 92 L470 70 L540 94 L800 94 V120 H0Z" fill="#3d1815"/><path d="M0 100 Q50 90 100 100 T200 100 T300 100 T400 100 T500 100 T600 100 T700 100 T800 100 V120 H0Z" fill="#1f3b57"/><path d="M0 110 Q50 102 100 110 T200 110 T300 110 T400 110 T500 110 T600 110 T700 110 T800 110 V120 H0Z" fill="#2c5478"/></svg></div>
+  <div class="hero" id="hero" role="region" aria-roledescription="carousel" aria-label="Sorotan Paceritane">
+    <div class="car-vp" id="car-vp"><div class="car-track" id="car-track">
+      <div class="slide"><h1><span class="jv">ꦥꦕꦺꦫꦶꦠꦤꦺ</span><span class="wm">Paceritane</span></h1><p>Galeri cerpen karya siswa Pacitan: cerita dari pantai, karst, dan goa. Klik sampulnya untuk membaca.</p></div>
+      <div class="slide"><div class="sl-h">Cerpen Terbaru</div><div class="sl-row" id="car-new"></div></div>
+      <div class="slide"><div class="sl-h">Ayo Menulis!</div><p>Tulis ceritamu, unggah PDF-nya, lalu biarkan teman-teman di seluruh Pacitan membacanya.</p><button class="btn gold" id="car-cta" type="button">Mulai Menulis</button></div>
+      <div class="slide"><div class="sl-h">Belum Lancar Membaca?</div><p>Buka sebuah cerpen lalu tekan 🔊 Bacakan. Dengarkan ceritanya sambil mengikuti kata yang disorot.</p></div>
+    </div></div>
+    <button class="car-b prev" id="car-p" type="button" aria-label="Slide sebelumnya">‹</button>
+    <button class="car-b next" id="car-n" type="button" aria-label="Slide berikutnya">›</button>
+    <div class="car-dots" id="car-dots"></div>
+  </div>
   <div class="tools">
     <input id="q" type="search" placeholder="🔍 Cari judul atau nama penulis…">
     <select id="fj"><option value="">Jenjang</option><option>SD/MI</option><option>SMP/MTs</option><option>SMA/SMK/MA</option></select>
@@ -368,6 +396,37 @@ async function openBook(it){
   }
 }
 
+var car={i:0,n:4,t:null,paused:false,sw:false,x:null};
+function renderCar(){var l=items.slice(0,5),r=$("car-new");r.innerHTML=l.length?l.map(function(i){return '<button class="item sl-c" data-id="'+esc(i.id)+'">'+coverHTML(i)+'<b>'+esc(i.judul)+'</b></button>'}).join(""):'<p>Belum ada cerpen. Jadilah penulis pertama!</p>'}
+function carGo(k){
+  car.i=(k+car.n)%car.n;
+  $("car-track").style.transform="translateX(-"+(car.i*100)+"%)";
+  var sl=$("car-track").children,d=$("car-dots").children;
+  for(var j=0;j<sl.length;j++){sl[j].inert=j!==car.i;sl[j].setAttribute("aria-hidden",j!==car.i?"true":"false")}
+  for(var q=0;q<d.length;q++){d[q].classList.toggle("on",q===car.i);d[q].setAttribute("aria-current",q===car.i?"true":"false")}
+}
+function carPlay(){clearInterval(car.t);if(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches)return;car.t=setInterval(function(){if(!car.paused&&!document.hidden)carGo(car.i+1)},6000)}
+(function(){
+  var dots=$("car-dots");
+  for(var k=0;k<car.n;k++){(function(k){var b=document.createElement("button");b.type="button";b.setAttribute("aria-label","Slide "+(k+1));b.onclick=function(){carGo(k);carPlay()};dots.appendChild(b)})(k)}
+  $("car-p").onclick=function(){carGo(car.i-1);carPlay()};
+  $("car-n").onclick=function(){carGo(car.i+1);carPlay()};
+  var h=$("hero");
+  h.addEventListener("mouseenter",function(){car.paused=true});h.addEventListener("mouseleave",function(){car.paused=false});
+  h.addEventListener("focusin",function(){car.paused=true});h.addEventListener("focusout",function(){car.paused=false});
+  var vp=$("car-vp");
+  vp.addEventListener("pointerdown",function(e){car.x=e.clientX;car.sw=false;car.paused=true});
+  vp.addEventListener("pointerup",function(e){
+    if(car.x==null)return;var dx=e.clientX-car.x;car.x=null;
+    if(Math.abs(dx)>45){car.sw=true;carGo(car.i+(dx<0?1:-1));carPlay()}
+    setTimeout(function(){car.paused=false},1500);
+  });
+  vp.addEventListener("pointercancel",function(){car.x=null;car.paused=false});
+  vp.addEventListener("click",function(e){if(car.sw){e.stopPropagation();e.preventDefault();car.sw=false}},true);
+  $("car-cta").onclick=function(){show("dash");scrollTo(0,0)};
+  $("car-new").onclick=$("grid").onclick;
+  renderCar();carGo(0);carPlay();
+})();
 var SB_URL="https://ofottmfqtphnokbrjcpg.supabase.co",SB_KEY="sb_publishable_RFjxd32qTOsfoL6fFG8Wvw_7Pc44vy1",BK="cerpen";
 var ses=null,mode="in",cancelled=false;
 function pub(p){return p?SB_URL+"/storage/v1/object/public/"+BK+"/"+p:null}
@@ -376,7 +435,7 @@ async function load(){
   if(!sb)return;
   var r=await sb.from("cerpen").select("*").order("created_at",{ascending:false}).limit(500);
   if(r.error){$("empty").hidden=false;$("empty").textContent="Galeri belum bisa dimuat. Periksa koneksi internet lalu muat ulang halaman.";return}
-  items=r.data.map(mapRow);render();renderMine();
+  items=r.data.map(mapRow);render();renderMine();renderCar();
 }
 function renderMine(){
   var m=items.filter(function(i){return ses&&i.uid===ses.id});
